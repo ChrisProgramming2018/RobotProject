@@ -62,7 +62,7 @@ class TD31v1(object):
             done = torch.Tensor(batch_dones).to(self.device)
             
             state = self.critic.create_vector(state_image)
-            detach_state = state
+            detach_state = state.detach()
             next_state = self.critic.create_vector(next_state)
             with torch.no_grad(): 
                 # Step 5: From the next state s’, the Actor target plays the next action a’
@@ -81,7 +81,7 @@ class TD31v1(object):
                 target_Q = reward + ((1 - done) * self.discount * target_Q).detach()
             
             # Step 10: The two Critic models take each the couple (s, a) as input and return two Q-values Q1(s,a) and Q2(s,a) as outputs
-            state = self.critic.create_vector(state_image, False)
+            #state = self.critic.create_vector(state_image, False)
             current_Q1, current_Q2 = self.critic(state, action) 
             # Step 11: We compute the loss coming from the two Critic models: Critic Loss = MSE_Loss(Q1(s,a), Qt) + MSE_Loss(Q2(s,a), Qt)
         
