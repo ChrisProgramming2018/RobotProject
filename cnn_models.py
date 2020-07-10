@@ -65,7 +65,7 @@ class CNNCritic_online(nn.Module):
         x1 = self.layer_3(x1)
         return x1
 
-    def create_vector(self, obs):
+    def create_vector(self, obs, detach=True):
         obs_shape = obs.size()
         if_high_dim = (len(obs_shape) == 5)
         if if_high_dim: # case of RNN input
@@ -79,7 +79,9 @@ class CNNCritic_online(nn.Module):
 
         if if_high_dim:
             obs = obs.view(obs_shape[0], obs_shape[1], -1)
-        return obs.detach()
+        if detach:
+            return obs.detach()
+        return obs
 
 class CNNCritic_target(nn.Module):
     def __init__(self, state_dim, action_dim):
