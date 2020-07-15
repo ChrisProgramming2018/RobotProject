@@ -44,29 +44,32 @@ class TD31v1(object):
         self.step += 1
         for it in range(iterations):
             # Step 4: We sample a batch of transitions (s, s’, a, r) from the memory
-            batch_states, batch_next_states, batch_actions, batch_rewards, batch_dones = replay_buffer.sample(self.batch_size)
-            state_image = torch.Tensor(batch_states).to(self.device).div_(255)
-            next_state = torch.Tensor(batch_next_states).to(self.device).div_(255)
+            obs, action, reward, next_obs, not_done, obs_aug, next_obs_aug = replay_buffer.sample(self.batch_size)
+            #batch_states, batch_next_states, batch_actions, batch_rewards, batch_dones = replay_buffer.sample(self.batch_size)
+            #state_image = torch.Tensor(batch_states).to(self.device).div_(255)
+            #next_state = torch.Tensor(batch_next_states).to(self.device).div_(255)
             # create vector 
-            action = torch.Tensor(batch_actions).to(self.device)
-            reward = torch.Tensor(batch_rewards).to(self.device)
-            done = torch.Tensor(batch_dones).to(self.device)
-            
-            state = self.critic.create_vector(state_image)
+            #reward = torch.Tensor(batch_rewards).to(self.device)
+            #done = torch.Tensor(batch_dones).to(self.device)
+            obs = obs.div_(255)
+            next_obs = next_obs.div_(255)
+            obs_aug = obs_aug.div_(255)
+            next_obs_aug = next_obs_aug.div_(255)
+
+            state = self.critic.create_vector(obs)
             detach_state = state.detach()
-            next_state = self.critic.create_vector(next_state)
+            next_state = self.critic.create_vector(next_obs)
             with torch.no_grad(): 
                 # Step 5: From the next state s’, the Actor target plays the next action a’
                 next_action = self.actor_target(next_state)
-                # Step 6: We add Gaussian noise to this next action a’ and we clamp it in a range of values supported by the environment
-                noise = torch.Tensor(batch_actions).data.normal_(0, self.policy_noise).to(self.device)
-                noise = noise.clamp(-self.noise_clip, self.noise_clip)
+                noise = (torch.randn_like(action) * self.policy_noise).clamp(-self.noise_clip, self.noise_clip)
                 next_action = (next_action + noise).clamp(-self.max_action, self.max_action)
+                
                 # Step 7: The two Critic targets take each the couple (s’, a’) as input and return two Q-values Qt1(s’,a’) and Qt2(s’,a’) as outputs
                 target_Q1, target_Q2 = self.target_critic(next_state, next_action) 
                 target_Q = torch.min(target_Q1, target_Q2)
                 # Step 9: We get the final target of the two Critic models, which is: Qt = r + γ * min(Qt1, Qt2), where γ is the discount factor
-                target_Q = reward + ((1 - done) * self.discount * target_Q).detach()
+                target_Q = reward + (not_done * self.discount * target_Q).detach()
             
             # Step 10: The two Critic models take each the couple (s, a) as input and return two Q-values Q1(s,a) and Q2(s,a) as outputs
             #state = self.critic.create_vector(state_image, False)

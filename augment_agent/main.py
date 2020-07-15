@@ -39,7 +39,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--env-name', default="SawyerLift", type=str, help='Name of a environment (set it to any Continous environment you want')
     parser.add_argument('--seed', default=1, type=int, help='Random seed')
-    parser.add_argument('--start_timesteps', default=10000, type=int)
+    parser.add_argument('--start_timesteps', default=2.5e4, type=int)
     parser.add_argument('--eval_freq', default=1e4, type=int)  # How often the evaluation step is performed (after how many timesteps)
     parser.add_argument('--max_timesteps', default=5e6, type=int)               # Total number of iterations/timesteps
     parser.add_argument('--buffer_size', default=1e5, type=int)               # 
