@@ -1,0 +1,116 @@
+import torch
+
+from cnn_models import Actor, CNNCritic
+
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+
+
+# Building the whole Training Process into a class
+
+class DDPG(object):
+    def __init__(self, state_dim, action_dim, actor_input_dim, args):
+        input_dim = [3, 84, 84]
+        self.actor = Actor(state_dim, action_dim).to(args.device)
+        self.actor_target = Actor(state_dim, action_dim).to(args.device)
+        self.actor_target.load_state_dict(self.actor.state_dict())
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), args.lr_actor)
+        self.critic = CNNCritic(input_dim, state_dim, action_dim).to(args.device)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), args.lr_critic)
+        self.target_critic = CNNCritic(input_dim, state_dim, action_dim).to(args.device)
+        self.target_critic.load_state_dict(self.target_critic.state_dict())
+        self.max_action = 1
+        self.step = 0 
+        self.batch_size = args.batch_size
+        self.discount = args.discount
+        self.tau = args.tau 
+        self.device = args.device
+
+    def select_action(self, state):
+        state = torch.Tensor(state).to(self.device).div_(255)
+        state = state.unsqueeze(0)
+        state = self.critic.create_vector(state)
+        return self.actor(state).cpu().data.numpy().flatten()
+    
+    
+    def train(self, replay_buffer, writer, iterations):
+        self.step += 1
+        for it in range(iterations):
+            # Step 4: We sample a batch of transitions (s, s’, a, r) from the memory
+            obs, action, reward, next_obs, not_done, obs_aug, next_obs_aug = replay_buffer.sample(self.batch_size)
+            #batch_states, batch_next_states, batch_actions, batch_rewards, batch_dones = replay_buffer.sample(self.batch_size)
+            #state_image = torch.Tensor(batch_states).to(self.device).div_(255)
+            #next_state = torch.Tensor(batch_next_states).to(self.device).div_(255)
+            # create vector 
+            #reward = torch.Tensor(batch_rewards).to(self.device)
+            #done = torch.Tensor(batch_dones).to(self.device)
+            obs = obs.div_(255)
+            next_obs = next_obs.div_(255)
+            obs_aug = obs_aug.div_(255)
+            next_obs_aug = next_obs_aug.div_(255)
+
+            state = self.critic.create_vector(obs)
+            detach_state = state.detach()
+            next_state = self.critic.create_vector(next_obs)
+            state_aug = self.critic.create_vector(obs_aug)
+            detach_state_aug = state_aug.detach()
+            next_state_aug = self.critic.create_vector(next_obs_aug)
+            with torch.no_grad(): 
+                # Step 5: From the next state s’, the Actor target plays the next action a’
+                next_action = self.actor_target(next_state)
+                target_Q = sel.target_critic(next_state, next_action)
+                # Step 9: We get the final target of the two Critic models, which is: Qt = r + γ * min(Qt1, Qt2), where γ is the discount factor
+                target_Q = reward + (not_done * self.discount * target_Q).detach()
+                
+                # again with augmented data
+                next_action_aug = self.actor_target(next_state_aug)    
+                target_aug_Q = sel.target_critic(next_state_aug, next_action_aug)
+                target_aug_Q = reward + (not_done * self.discount * target_aug_Q).detach()
+                target_Q = (target_Q + target_aug_Q) / 2.
+
+
+            current_Q1 = self.critic(state, action) 
+
+            critic_loss = F.mse_loss(current_Q1, target_Q)
+            
+            # again for augment
+            Q1_aug = self.critic(state_aug, action) 
+            critic_loss += F.mse_loss(Q1_aug, target_Q)
+            # Step 12: We backpropagate this Critic loss and update the parameters of the two Critic models with a SGD optimizer
+            self.critic_optimizer.zero_grad()
+            critic_loss.backward()
+            self.critic_optimizer.step()
+                
+            actor_loss = -self.critic.Q1(detach_state, self.actor(detach_state)).mean()
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor_optimizer.step()
+                
+            for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+                
+            for param, target_param in zip(self.critic.parameters(), self.target_critic.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+                    
+                
+    def hardupdate(self):
+        pass
+
+    def save(self, filename):
+        torch.save(self.critic.state_dict(), filename + "_critic")
+        torch.save(self.critic_optimizer.state_dict(), filename + "_critic_optimizer")
+                
+        torch.save(self.actor.state_dict(), filename + "_actor")
+        torch.save(self.actor_optimizer.state_dict(), filename + "_actor_optimizer")
+
+
+    def load(self, filename):
+        self.critic.load_state_dict(torch.load(filename + "_critic"))
+        self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
+        self.critic_target = copy.deepcopy(self.critic)
+        self.actor.load_state_dict(torch.load(filename + "_actor"))
+        self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
+        self.actor_target = copy.deepcopy(self.actor)
+                
