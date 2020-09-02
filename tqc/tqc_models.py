@@ -126,3 +126,22 @@ class TanhNormal(Distribution, device):
         pretanh = self.normal_mean + self.normal_std * self.standard_normal.sample()
         return torch.tanh(pretanh), pretanh
 
+class Mlp(Module):
+    def __init__(self, input_size, hidden_sizes, output_size):
+        super().__init__()
+        self.fcs = []
+        in_size = input_size
+        for i, next_size in enumerate(hidden_sizes):
+            fc = Linear(in_size, next_size)
+            self.add_module(f'fc{i}', fc)
+            self.fcs.append(fc)
+            in_size = next_size
+        self.last_fc = Linear(in_size, output_size)
+
+    def forward(self, input):
+        h = input
+        for fc in self.fcs:
+            h = relu(fc(h))
+        output = self.last_fc(h)
+        return output
+
